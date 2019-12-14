@@ -1,1 +1,2 @@
-# mswallet
+# bcoswallet for fisco-bcos 
+
