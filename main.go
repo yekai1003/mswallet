@@ -18,6 +18,7 @@ func main() {
 	// Routes
 	e.GET("/hello", router.Hello)
 	e.POST("/register", router.Register)
+	e.POST("/login", router.Login)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":8080"))
