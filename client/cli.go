@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -156,6 +157,12 @@ func (c CLI) Run() {
 
 //创建账户功能 name = yekai  /data/yekai/0x------- /data/xiaohong/0x
 func (c CLI) CreateWallet(name, pass string) (string, error) {
+	//目录检测
+	if c.getAddr(name) != "" {
+		fmt.Printf("Acct %s is exists\n", name)
+		return "", errors.New("Acct" + name + "exists")
+	}
+
 	//1. NewEntropy 必须是32的整数倍，并且在128- 256之间
 
 	entropy, _ := bip39.NewEntropy(128)
@@ -282,7 +289,7 @@ func (c CLI) Login(acctname, password string) (string, error) {
 	fromAddr := c.getAddr(acctname)
 	if fromAddr == "" {
 		fmt.Println("acct not exists ")
-		return "", nil
+		return "", errors.New("acct not exists")
 	}
 	_, err := hdks.GetKey(common.HexToAddress(fromAddr), hdks.JoinPath(fromAddr), password)
 	if err != nil {
