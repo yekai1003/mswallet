@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/yekai1003/mswallet/erc20s"
+	"github.com/yekai1003/mswallet/bcos"
 	"github.com/yekai1003/mswallet/hd"
 	"github.com/yekai1003/mswallet/hdkeystore"
 
@@ -23,10 +23,15 @@ import (
 	"github.com/yekai1003/gobcos/common"
 )
 
+const ADMIN_CONTRACT = "ADMIN_CONTRACT"
+const ADMIN_JSON = "admin.json"
+const ADMIN_CONTRACT_PRE = "0x5Fd877666843cbB8D4349C29069033aA3C541a50"
+
 type CLI struct {
-	DataPath   string
-	NetWorkUrl string
-	TokenFile  string
+	DataPath          string
+	NetWorkUrl        string
+	TokenFile         string
+	AdminContractAddr string
 }
 
 type TokenConfig struct {
@@ -34,11 +39,34 @@ type TokenConfig struct {
 	Addr   string `json:"addr"`
 }
 
+var AdminKey = `{"address":"3f8712acd6ed891ec329fd5ae0a93dd713237e5d","crypto":{"cipher":"aes-128-ctr","ciphertext":"623b85925792e49ac809f474c96a6dc46080d865e5fe1fa89df6c3410fbbfda1","cipherparams":{"iv":"4f0521483a5577b1573f0f63d88b0ede"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":4096,"p":6,"r":8,"salt":"c8ac5e6ee11526b43c2b66a44d0c0bd006fdaff23d22bd64e968406f61e38244"},"mac":"5fd86fc981d37bda5fdab0374db7916244b3dbb3eb71e92b9b6e509e21f9f009"},"id":"2785cb09-649d-4deb-88d2-de152eb78bd5","version":3}`
+
+func init() {
+	fd, err := os.Open(ADMIN_JSON)
+	if err != nil {
+		fmt.Println("Failed to open file ", err, ADMIN_JSON)
+		//AdminKeyIn = strings.NewReader(AdminKey)
+		return
+	}
+	data, err := ioutil.ReadAll(fd)
+	if err != nil {
+		fmt.Println("Failed to ReadAll ", err, ADMIN_JSON)
+		//AdminKeyIn = strings.NewReader(AdminKey)
+		return
+	}
+	AdminKey = string(data)
+}
+
 func NewCLI(path, url, tokenfile string) *CLI {
+	adAddr := os.Getenv(ADMIN_CONTRACT)
+	if adAddr == "" {
+		adAddr = ADMIN_CONTRACT_PRE
+	}
 	return &CLI{
-		DataPath:   path,
-		NetWorkUrl: url,
-		TokenFile:  tokenfile,
+		DataPath:          path,
+		NetWorkUrl:        url,
+		TokenFile:         tokenfile,
+		AdminContractAddr: adAddr,
 	}
 }
 
@@ -239,7 +267,7 @@ func (c CLI) AddToken(addr string) {
 		log.Panic("Failed to client.Dial", err)
 	}
 	//2. 通过合约地址创建合约实例
-	ins, err := erc20.NewErc20(common.HexToAddress(addr), client)
+	ins, err := bcos.NewErc20(common.HexToAddress(addr), client)
 	if err != nil {
 		log.Panic("Failed to erc20.NewErc20:", err)
 	}
@@ -312,7 +340,7 @@ func (c CLI) SendToken(acctname, toaddr, symbol string, amount int64) {
 		fmt.Println("symbol not exists", symbol)
 		return
 	}
-	ins, err := erc20.NewErc20(common.HexToAddress(contract_addr), client)
+	ins, err := bcos.NewErc20(common.HexToAddress(contract_addr), client)
 	if err != nil {
 		log.Panic("Failed to erc20.NewErc20", err)
 	}
@@ -386,11 +414,125 @@ func (cli *CLI) GetTokensBalance(acct_name string) {
 func (cli *CLI) getTokenBalance(contract, account string, opts *bind.CallOpts) (*big.Int, error) {
 	client, err := client.Dial(cli.NetWorkUrl, 1)
 	if err != nil {
-		log.Panic("failed to getTokenBalance when dial", err)
+		fmt.Println("failed to getTokenBalance when dial", err)
+		return nil, err
 	}
-	ins, err := erc20.NewErc20(common.HexToAddress(contract), client)
+	ins, err := bcos.NewErc20(common.HexToAddress(contract), client)
 	if err != nil {
-		log.Panic("failed to getTokenBalance when NewErc20", err)
+		fmt.Println("failed to getTokenBalance when NewErc20", err)
+		return nil, err
 	}
 	return ins.BalanceOf(opts, common.HexToAddress(account))
+}
+
+//管理员挖矿给工人
+func (c CLI) AdminMintToken(pass, toaddr string, amount int64) (string, error) {
+	//1. 连接到网络
+	client, err := client.Dial(c.NetWorkUrl, 1)
+	if err != nil {
+		fmt.Println("Failed to client.Dial", err)
+		return "", err
+	}
+	defer client.Close()
+	//2. 生成合约实例
+
+	ins, err := bcos.NewTokenadmin(common.HexToAddress(c.AdminContractAddr), client)
+	if err != nil {
+		fmt.Println("Failed to erc20.NewTokenadmin", err)
+		return "", err
+	}
+	//3. 设置签名
+	keyin := strings.NewReader(AdminKey)
+	fmt.Println(pass, AdminKey)
+	auth, err := bind.NewTransactor(keyin, pass)
+	if err != nil {
+		fmt.Println("AdminMintToken:Failed to NewTransactor", err)
+		return "", err
+	}
+	//4. 合约调用
+	//opts *bind.TransactOpts, to common.Address, value *big.Int
+	value := big.NewInt(amount)
+	tx, err := ins.Mint(auth, common.HexToAddress(toaddr), value)
+	if err != nil {
+		fmt.Println("Failed to ins.Mint ", err)
+		return "", err
+	}
+	return tx.Hash().Hex(), err
+}
+
+//管理员销毁token
+func (c CLI) AdminBurnToken(pass, owner string, amount int64) (string, error) {
+	//1. 连接到网络
+	client, err := client.Dial(c.NetWorkUrl, 1)
+	if err != nil {
+		fmt.Println("Failed to client.Dial", err)
+		return "", err
+	}
+	defer client.Close()
+	//2. 生成合约实例
+
+	ins, err := bcos.NewTokenadmin(common.HexToAddress(c.AdminContractAddr), client)
+	if err != nil {
+		fmt.Println("AdminBurnToken:Failed to bcos.NewTokenadmin", err)
+		return "", err
+	}
+	//3. 设置签名
+	//2.签名
+	keyin := strings.NewReader(AdminKey)
+	fmt.Println(pass, AdminKey)
+	auth, err := bind.NewTransactor(keyin, pass)
+	if err != nil {
+		fmt.Println("Failed to NewTransactor", err)
+		return "", err
+	}
+	//4. 合约调用
+	value := big.NewInt(amount)
+	tx, err := ins.Burn(auth, common.HexToAddress(owner), value)
+	if err != nil {
+		fmt.Println("Failed to ins.Burn ", err)
+		return "", err
+	}
+	return tx.Hash().Hex(), err
+}
+
+//查询token余额
+func (c CLI) ADTokenBalance(fromaddr string) (big.Int, error) {
+	value := big.NewInt(0)
+	//1. 连接到网络
+	client, err := client.Dial(c.NetWorkUrl, 1)
+	if err != nil {
+		fmt.Println("Failed to client.Dial", err)
+		return *value, err
+	}
+	defer client.Close()
+	//2. 生成合约实例
+
+	ins, err := bcos.NewTokenadmin(common.HexToAddress(c.AdminContractAddr), client)
+	if err != nil {
+		fmt.Println("Failed to bcos.NewTokenadmin", err)
+		return *value, err
+	}
+	//3. 设置签名
+	opts := bind.CallOpts{
+		From: common.HexToAddress(fromaddr),
+	}
+	//4. 合约调用
+
+	tokenaddr, err := ins.Tokenaddr(&opts)
+	if err != nil {
+		fmt.Println("Failed to ins.Tokenaddr ", err)
+		return *value, err
+	}
+	token, err := bcos.NewErc20(tokenaddr, client)
+	if err != nil {
+		fmt.Println("Failed to bcos.NewErc20 ", err)
+		return *value, err
+	}
+	value, err = token.BalanceOf(&opts, opts.From)
+	if err != nil {
+		fmt.Println("Failed to token.BalanceOf ", err)
+		return *value, err
+	}
+	fmt.Println(value)
+	return *value, err
 }

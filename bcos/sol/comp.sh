@@ -1,0 +1,1 @@
+abigen-bcos -abi 20.abi -bin 20.bin -type erc20 -pkg bcos -out erc20.go

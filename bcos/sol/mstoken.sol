@@ -15,7 +15,7 @@ import "./SafeMath.sol";
  * all accounts just by listening to said events. Note that this isn't required by the specification, and other
  * compliant implementations may not do it.
  */
-contract mstoken is IERC20 {
+contract mstoken3 is IERC20 {
     using SafeMath for uint256;
     string public _symbol;
     address public _foundation;
@@ -40,7 +40,13 @@ contract mstoken is IERC20 {
     function mint(address addr, uint256 amount ) public onlyceo {
        _mint(addr, amount);
     }
-
+    //_burn(address account, uint256 value)
+    function burn(uint256 value) public {
+        _burn(msg.sender, value);
+    }
+    function addr() public view returns (address) {
+        return address(this);
+    }
     /**
      * @dev Total number of tokens in existence.
      */

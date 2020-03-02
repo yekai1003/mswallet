@@ -19,6 +19,9 @@ func main() {
 	e.GET("/hello", router.Hello)
 	e.POST("/register", router.Register)
 	e.POST("/login", router.Login)
+	e.POST("/mint", router.TokenMint)
+	e.POST("/burn", router.TokenBurn)
+	e.GET("/balance/:fromaddr", router.GetBalance)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":8080"))

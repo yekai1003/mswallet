@@ -1,6 +1,7 @@
 package router
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -14,6 +15,18 @@ import (
 type User struct {
 	UserName string `json:"username"`
 	PassWord string `json:"password"`
+}
+
+type MintMsg struct {
+	PassWord string `json:"password"`
+	ToAddr   string `json:"toaddr"`
+	Val      uint   `json:"value"`
+}
+
+type BurnMsg struct {
+	PassWord string `json:"password"`
+	Owner    string `json:"owner"`
+	Val      uint   `json:"value"`
 }
 
 func ResponseData(c echo.Context, resp *util.Resp) {
@@ -78,4 +91,90 @@ func Login(c echo.Context) error {
 	}
 	resp.Data = addr
 	return nil
+}
+
+//post: /mint {toname,password,value}
+func TokenMint(c echo.Context) error {
+	//1. 响应数据结构初始化
+	var resp util.Resp
+	resp.Errno = util.RECODE_OK
+	defer ResponseData(c, &resp)
+
+	//2. 解析数据
+	mintMsg := MintMsg{}
+	if err := c.Bind(&mintMsg); err != nil {
+		fmt.Println("TokenMint:Failed to Bind ", err, mintMsg)
+		resp.Errno = util.RECODE_ACCERR
+		return err
+	}
+
+	//3. 根据请求的数据创建账户
+	cli := client.NewCLI(util.GetDataPath(), util.GetBcosNetwork(), util.GetTokenPath())
+	hash, err := cli.AdminMintToken(mintMsg.PassWord, mintMsg.ToAddr, int64(mintMsg.Val))
+	if err != nil {
+		fmt.Println("TokenMint:Failed to AdminMintToken ", err, mintMsg)
+		resp.Errno = util.RECODE_BCOSERR
+		return err
+	}
+	resp.Data = hash
+	return err
+}
+
+//post: /tokenburn {password,value}
+func TokenBurn(c echo.Context) error {
+	//1. 响应数据结构初始化
+	var resp util.Resp
+	resp.Errno = util.RECODE_OK
+	defer ResponseData(c, &resp)
+
+	//2. 解析数据
+	burnMsg := BurnMsg{}
+	if err := c.Bind(&burnMsg); err != nil {
+		fmt.Println("TokenBurn:Failed to Bind ", err, burnMsg)
+		resp.Errno = util.RECODE_UNKNOWERR
+		return err
+	}
+
+	//3. 根据请求的数据创建账户
+	cli := client.NewCLI(util.GetDataPath(), util.GetBcosNetwork(), util.GetTokenPath())
+	hash, err := cli.AdminBurnToken(burnMsg.PassWord, burnMsg.Owner, int64(burnMsg.Val))
+	if err != nil {
+		fmt.Println("TokenBurn:Failed to AdminBurnToken ", err, burnMsg)
+		resp.Errno = util.RECODE_BCOSERR
+		return err
+	}
+	resp.Data = hash
+	return err
+}
+
+//GET: /balance/:fromaddr
+func GetBalance(c echo.Context) error {
+	//1. 响应数据结构初始化
+	fmt.Println("begin GetBalance")
+	var resp util.Resp
+	resp.Errno = util.RECODE_OK
+	defer ResponseData(c, &resp)
+
+	//2. 解析数据
+	fromaddr := c.Param("fromaddr")
+
+	if fromaddr == "" {
+		fmt.Println("TokenBurn:Failed to get  fromaddr", fromaddr)
+		resp.Errno = util.RECODE_UNKNOWERR
+		return errors.New("no fromaddr")
+	}
+	fmt.Println(fromaddr)
+	//3. 根据请求的数据创建账户
+	cli := client.NewCLI(util.GetDataPath(), util.GetBcosNetwork(), util.GetTokenPath())
+	val, err := cli.ADTokenBalance(fromaddr)
+	if err != nil {
+		fmt.Println("TokenBurn:Failed to ADTokenBalance ", err, fromaddr)
+		resp.Errno = util.RECODE_BCOSERR
+		return err
+	}
+	resp.Data = struct {
+		Balance int64 `json:"balance"`
+	}{Balance: val.Int64()}
+	fmt.Println(resp)
+	return err
 }
