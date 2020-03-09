@@ -25,7 +25,8 @@ import (
 
 const ADMIN_CONTRACT = "ADMIN_CONTRACT"
 const ADMIN_JSON = "admin.json"
-const ADMIN_CONTRACT_PRE = "0x5Fd877666843cbB8D4349C29069033aA3C541a50"
+
+var ADMIN_CONTRACT_PRE = "0x5Fd877666843cbB8D4349C29069033aA3C541a50"
 
 type CLI struct {
 	DataPath          string
@@ -38,6 +39,8 @@ type TokenConfig struct {
 	Symbol string `json:"symbol"`
 	Addr   string `json:"addr"`
 }
+
+const AdminAddr = "0x3f8712acd6ed891ec329fd5ae0a93dd713237e5d"
 
 var AdminKey = `{"address":"3f8712acd6ed891ec329fd5ae0a93dd713237e5d","crypto":{"cipher":"aes-128-ctr","ciphertext":"623b85925792e49ac809f474c96a6dc46080d865e5fe1fa89df6c3410fbbfda1","cipherparams":{"iv":"4f0521483a5577b1573f0f63d88b0ede"},"kdf":"scrypt","kdfparams":{"dklen":32,"n":4096,"p":6,"r":8,"salt":"c8ac5e6ee11526b43c2b66a44d0c0bd006fdaff23d22bd64e968406f61e38244"},"mac":"5fd86fc981d37bda5fdab0374db7916244b3dbb3eb71e92b9b6e509e21f9f009"},"id":"2785cb09-649d-4deb-88d2-de152eb78bd5","version":3}`
 
@@ -531,6 +534,72 @@ func (c CLI) ADTokenBalance(fromaddr string) (big.Int, error) {
 	value, err = token.BalanceOf(&opts, opts.From)
 	if err != nil {
 		fmt.Println("Failed to token.BalanceOf ", err)
+		return *value, err
+	}
+	fmt.Println(value)
+	return *value, err
+}
+
+//查询token余额
+func (c CLI) DeployToken(pass, symbol string) (string, error) {
+	//1. 连接到网络
+	client, err := client.Dial(c.NetWorkUrl, 1)
+	if err != nil {
+		fmt.Println("Failed to client.Dial", err)
+		return "", err
+	}
+	defer client.Close()
+	//2.签名
+	keyin := strings.NewReader(AdminKey)
+	auth, err := bind.NewTransactor(keyin, pass)
+	//2. 生成合约实例
+
+	address, _, _, err := bcos.DeployTokenadmin(auth, client, symbol)
+	if err != nil {
+		fmt.Println("Failed to DeployTokenadmin", err)
+		return "", err
+	}
+	ADMIN_CONTRACT_PRE = address.Hex()
+	fmt.Println("update contract:", ADMIN_CONTRACT_PRE)
+	return address.Hex(), err
+}
+
+//查询token余额
+func (c CLI) GetTotalSupply() (big.Int, error) {
+	value := big.NewInt(0)
+	//1. 连接到网络
+	client, err := client.Dial(c.NetWorkUrl, 1)
+	if err != nil {
+		fmt.Println("Failed to client.Dial", err)
+		return *value, err
+	}
+	defer client.Close()
+	//2. 生成合约实例
+
+	ins, err := bcos.NewTokenadmin(common.HexToAddress(c.AdminContractAddr), client)
+	if err != nil {
+		fmt.Println("Failed to bcos.NewTokenadmin", err)
+		return *value, err
+	}
+	//3. 设置签名
+	opts := bind.CallOpts{
+		From: common.HexToAddress(AdminAddr),
+	}
+	//4. 合约调用
+
+	tokenaddr, err := ins.Tokenaddr(&opts)
+	if err != nil {
+		fmt.Println("Failed to ins.Tokenaddr ", err)
+		return *value, err
+	}
+	token, err := bcos.NewErc20(tokenaddr, client)
+	if err != nil {
+		fmt.Println("Failed to bcos.NewErc20 ", err)
+		return *value, err
+	}
+	value, err = token.TotalSupply(&opts)
+	if err != nil {
+		fmt.Println("Failed to TotalSupply ", err)
 		return *value, err
 	}
 	fmt.Println(value)

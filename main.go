@@ -22,6 +22,8 @@ func main() {
 	e.POST("/mint", router.TokenMint)
 	e.POST("/burn", router.TokenBurn)
 	e.GET("/balance/:fromaddr", router.GetBalance)
+	e.POST("/deploy", router.DeployToken)
+	e.GET("/totalsupply", router.Totalsupply)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":8080"))

@@ -29,6 +29,11 @@ type BurnMsg struct {
 	Val      uint   `json:"value"`
 }
 
+type DeployTokenMsg struct {
+	PassWord string `json:"password"`
+	Symbol   string `json:"symbol"`
+}
+
 func ResponseData(c echo.Context, resp *util.Resp) {
 	resp.ErrMsg = util.RecodeText(resp.Errno)
 	c.JSON(http.StatusOK, resp)
@@ -176,5 +181,55 @@ func GetBalance(c echo.Context) error {
 		Balance int64 `json:"balance"`
 	}{Balance: val.Int64()}
 	fmt.Println(resp)
+	return err
+}
+
+//post: /deploy {password,symbol}
+func DeployToken(c echo.Context) error {
+	//1. 响应数据结构初始化
+	var resp util.Resp
+	resp.Errno = util.RECODE_OK
+	defer ResponseData(c, &resp)
+
+	//2. 解析数据
+	dt := DeployTokenMsg{}
+	if err := c.Bind(&dt); err != nil {
+		fmt.Println("DeployToken:Failed to Bind ", err, dt)
+		resp.Errno = util.RECODE_ACCERR
+		return err
+	}
+
+	//3. 根据请求的数据创建账户
+	cli := client.NewCLI(util.GetDataPath(), util.GetBcosNetwork(), util.GetTokenPath())
+	address, err := cli.DeployToken(dt.PassWord, dt.Symbol)
+	if err != nil {
+		fmt.Println("TokenMint:Failed to AdminMintToken ", err, dt)
+		resp.Errno = util.RECODE_BCOSERR
+		return err
+	}
+	resp.Data = struct {
+		Address string `json:"address"`
+	}{Address: address}
+	return err
+}
+
+//get: /totalsupply
+func Totalsupply(c echo.Context) error {
+	//1. 响应数据结构初始化
+	var resp util.Resp
+	resp.Errno = util.RECODE_OK
+	defer ResponseData(c, &resp)
+
+	//3. 根据请求的数据创建账户
+	cli := client.NewCLI(util.GetDataPath(), util.GetBcosNetwork(), util.GetTokenPath())
+	value, err := cli.GetTotalSupply()
+	if err != nil {
+		fmt.Println("TokenMint:Failed to GetTotalSupply ", err)
+		resp.Errno = util.RECODE_BCOSERR
+		return err
+	}
+	resp.Data = struct {
+		Value int64 `json:"totalsupply"`
+	}{Value: value.Int64()}
 	return err
 }
